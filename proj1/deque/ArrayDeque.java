@@ -105,7 +105,7 @@ public class ArrayDeque<T> {
             resize(items.length / 4);
         }
 
-        tail = (tail - 1) % items.length;
+        tail = (tail - 1 + items.length) % items.length;
 
         T item = items[tail];
         items[tail] = null;
@@ -128,19 +128,10 @@ public class ArrayDeque<T> {
 
     public static void main(String[] args) {
         ArrayDeque<Integer> L = new ArrayDeque<>();
-        L.addFirst(5);
-        L.addLast(6);
-        L.addLast(7);
-        L.addLast(8);
-        L.addFirst(9);
-        L.addLast(10);
-        L.addLast(11);
-        L.addLast(12);
-        L.addLast(13);
-        L.addFirst(14);
-        L.addFirst(15);
 
-        System.out.println(L.get(14));
-        System.out.println(L.removeFirst());
+        L.addLast(1);
+        L.addLast(2);
+
+        L.removeFirst();
     }
 }
