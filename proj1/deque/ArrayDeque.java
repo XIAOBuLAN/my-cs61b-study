@@ -1,6 +1,8 @@
 package deque;
 
-public class ArrayDeque<T> {
+import java.util.Iterator;
+
+public class ArrayDeque<T> implements Iterable<T>, Deque<T> {
 
     private T[] items;
     private int size;
@@ -29,6 +31,7 @@ public class ArrayDeque<T> {
     }
 
     /** Add at the front of Deque */
+    @Override
     public void addFirst(T item) {
         if (size == items.length) {
             resize(size * 2);
@@ -45,6 +48,7 @@ public class ArrayDeque<T> {
     }
 
     /** Add at the last of Deque */
+    @Override
     public void addLast(T item) {
         if (size == items.length) {
             resize(size * 2);
@@ -55,20 +59,14 @@ public class ArrayDeque<T> {
         size += 1;
     }
 
-    /** Ruturn true if deque is empty */
-    public Boolean isEmpty() {
-        if (size == 0) {
-            return true;
-        }
-        return false;
-    }
-
     /** Return size of deque */
+    @Override
     public int size() {
         return size;
     }
 
     /** Print out item from first to last */
+    @Override
     public void printDeque() {
         for (int i = 0; i < size; i++) {
             System.out.print(items[(head + i) % items.length] + " ");
@@ -78,6 +76,7 @@ public class ArrayDeque<T> {
 
     /** Removes and returns the item at the front of the deque.
      * If no such item exists, returns null. */
+    @Override
     public T removeFirst() {
         if (size == 0) {
             return null;
@@ -97,6 +96,7 @@ public class ArrayDeque<T> {
 
     /** Removes and returns the item at the back of the deque.
      * If no such item exists, returns null. */
+    @Override
     public T removeLast() {
         if (size == 0) {
             return null;
@@ -115,6 +115,7 @@ public class ArrayDeque<T> {
     }
 
     /**  Gets the item at the given index */
+    @Override
     public T get(int index) {
         int currentindex = (head + index) % items.length;
 
@@ -125,13 +126,55 @@ public class ArrayDeque<T> {
         return items[currentindex];
     }
 
+    /** Returns an Iterator into ME */
+    public Iterator<T> iterator(){
+        return new ArrayIterator();
+    }
 
-    public static void main(String[] args) {
-        ArrayDeque<Integer> L = new ArrayDeque<>();
+    private class ArrayIterator implements Iterator<T> {
+        private int wisPos;
 
-        L.addLast(1);
-        L.addLast(2);
+        public ArrayIterator(){
+            wisPos = 0;
+        }
 
-        L.removeFirst();
+        @Override
+        public boolean hasNext() {
+            return wisPos < size;
+        }
+
+        @Override
+        public T next() {
+            T item = get(wisPos);
+            wisPos += 1;
+            return item;
+        }
+    }
+
+    /** Returns whether or not the parameter o is equal to the Deque.
+     * o is considered equal if it is a Deque and if it contains the same contents
+     * (as governed by the generic T’s equals method) in the same order.
+     */
+    @Override
+    public boolean equals(Object o) {
+        if (! (o instanceof Deque)) {
+            return false;
+        }
+
+        if (((Deque<?>)o).size() != this.size){
+            return false;
+        }
+
+        if (o == this) {
+            return true;
+        }
+
+        for (int i = 0; i < this.size(); i += 1){
+            Object item = ((Deque<?>)o).get(i);
+            if(!this.get(i).equals(item)){
+                return false;
+            }
+        }
+        return true;
     }
 }
