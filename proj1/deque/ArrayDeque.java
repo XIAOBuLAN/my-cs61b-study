@@ -89,7 +89,7 @@ public class ArrayDeque<T> implements Iterable<T>, Deque<T> {
         T item = items[head];
         items[head] = null;
 
-        head += 1;
+        head = (head + 1) % items.length;
         size -= 1;
         return item;
     }
@@ -117,13 +117,11 @@ public class ArrayDeque<T> implements Iterable<T>, Deque<T> {
     /**  Gets the item at the given index */
     @Override
     public T get(int index) {
-        int currentindex = (head + index) % items.length;
-
-        if (currentindex >= size || currentindex < 0) {
+        if (index < 0 || index >= size) {
             return null;
         }
 
-        return items[currentindex];
+        return items[(head + index) % items.length];
     }
 
     /** Returns an Iterator into ME */
