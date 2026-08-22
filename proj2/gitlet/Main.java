@@ -17,10 +17,12 @@ public class Main {
         String firstArg = args[0];
         switch(firstArg) {
             case "init":
-                checkArgs(args, 1); Repository.init();
+                checkArgs(args, 1);
+                Repository.init();
                 break;
             case "add":
-                checkArgs(args, 2); Repository.add(args[1]);
+                checkArgs(args, 2);
+                Repository.add(args[1]);
                 break;
             case "commit":
                 checkArgs(args, 2); Repository.commit(args[1]);

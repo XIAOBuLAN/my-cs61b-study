@@ -13,7 +13,7 @@ import static gitlet.Utils.*;
  *  TODO: It's a good idea to give a description here of what else this Class
  *  does at a high level.
  *
- *  @author TODO
+ *  @author XIAOBU
  */
 public class Repository {
     /**
@@ -55,7 +55,7 @@ public class Repository {
      *   - blobs/ --folder containing all of the blobs
      *   - refs/
      *     -heads/
-     *      -master --txt document containing the head uid
+     *      -master --txt document containing the head commit's uid
      *   -HEAD --txt document that containing head pointer whose name is "master"
      */
     public static void init() {
@@ -76,15 +76,56 @@ public class Repository {
         Date Epoch = new Date(0);
         initial = new Commit("initial commit", Epoch, new ArrayList<>(), new TreeMap<>());
 
-        String uid = initial.getUID();
-        writeObject(join(COMMITS_DIR, uid), initial);
+        saveCommit(initial);
 
         writeContents(HEAD_FILE, "master");
-        writeContents(join(HEADS_DIR, "master"), uid);
+        writeContents(join(HEADS_DIR, "master"), initial.getUID());
     }
 
-    public static void add(String fileName) {}
-    public static void commit(String message) {}
+    /** Store the blob into stage */
+    public static void add(String fileName) {
+        File file = join(CWD, fileName);
+        if (!file.isFile()) {
+            throw error("File does not exist.");
+        }
+
+        String blobUID = fileBlobUID(file); //calculate the uid of added file's content
+        saveBlob(blobUID, readContents(file)); //save the file as a blob.
+
+        Commit head = readCommit(getHead()); //get the head commit
+        String headBlob = blobOf(head, fileName); //get the uid of file in the head commit
+
+        Stage stage = readStage();
+
+        if (blobUID.equals(headBlob)) {
+            stage.getAdditions().remove(fileName);
+            stage.getRemovals().remove(fileName);
+        } else {
+            stage.getAdditions().put(fileName, blobUID);
+            stage.getRemovals().remove(fileName);
+        }
+        writeStage(stage);
+    }
+
+    public static void commit(String message) {
+        if (message.isEmpty()) {
+            throw error("Please enter a commit message.");
+        }
+
+        Stage stage = readStage();
+        if (stage.isEmpty()) {
+            throw error("No changes added to the commit.");
+        }
+
+        Commit parent = readCommit(getHead());
+        TreeMap<String, String> newFiles = new TreeMap<>(parent.getFiles());
+
+        for (String fileName : stage.getRemovals()){
+            newFiles.remove(fileName);
+        }
+
+    }
+
     public static void rm(String fileName) {}
     public static void log() {}
     public static void globalLog() {}
@@ -96,39 +137,64 @@ public class Repository {
     public static void reset(String uid) {}
     public static void merge(String branchName) {}
 
-    /** helping methods */
 
+// ================helping methods=======================
+
+    /** reads the file named "HEAD" and returns the string of the name of current branch */
     private static String getBranch() {
-        return null;
-    }         // 读 HEAD 文件
+        return readContentsAsString(HEAD_FILE);
+    }
+
+    /** returns the content of the .txt document of current branch name,
+     * which is the UID of current commit */
     private static String getHead() {
-        return null;
-    }           // 当前分支指向的 commit UID
+        return readContentsAsString(join(HEADS_DIR, getBranch()));
+    }
+
+    /** Deserialize the commit, returns the commit that stored in the "commits" folder,
+     * whose name is its uid */
     private static Commit readCommit(String uid) {
-        return null;
+        return readObject(join(COMMITS_DIR, uid), Commit.class);
     }
+
+    /** Serializes the commit */
     private static void saveCommit(Commit c) {
-
-    }  // 写 commits/<uid>
-    private static String blobOf(Commit c, String fileName) {
-        return null;
-    } // 该提交中文件的 blob UID（无则 null）
-    private static String fileBlobUID(File f) {
-        return null;
-    } // sha1(文件内容)
-    private static void saveBlob(String uid, byte[] contents) {
-
+        writeObject(join(COMMITS_DIR, c.getUID()), c);
     }
+
+    /** returns the uid of the document named "fileName" in this commit
+     * (if theres's nothing then returns null)*/
+    private static String blobOf(Commit c, String fileName) {
+        return c.getFiles().get(fileName);
+    }
+
+    /** returns the hash of the content of the file */
+    private static String fileBlobUID(File f) {
+        return sha1(readContents(f));
+    }
+
+    /** Save the contents as a blob.
+     * If the blob already exist, then do nothing */
+    private static void saveBlob(String uid, byte[] contents) {
+        File blobFile = join(BLOBS_DIR, uid);
+        if (!blobFile.exists()) {
+            writeContents(blobFile, contents);
+        }
+    }
+
     private static Stage readStage() {
-        return null;
+        if (!INDEX_FILE.exists()) {
+            return new Stage();
+        }
+        return readObject(INDEX_FILE, Stage.class);
     }
 
     private static void writeStage(Stage s) {
+        writeObject(INDEX_FILE, s);
     }
+
     private static void checkoutFile(String uid, String fileName) {
 
     } // 从某提交把某文件写回工作区
-
-
 
 }
