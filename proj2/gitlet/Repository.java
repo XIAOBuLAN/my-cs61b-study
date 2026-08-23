@@ -1,9 +1,8 @@
 package gitlet;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.TreeMap;
+import java.io.Serializable;
+import java.util.*;
 
 import static gitlet.Utils.*;
 
@@ -56,6 +55,7 @@ public class Repository {
      *   - refs/
      *     -heads/
      *      -master --txt document containing the head commit's uid
+     *      -other_branch
      *   -HEAD --txt document that containing head pointer whose name is "master"
      */
     public static void init() {
@@ -108,7 +108,7 @@ public class Repository {
     }
 
     public static void commit(String message) {
-        if (message.isEmpty()) {
+        if (message == null || message.isEmpty()) {
             throw error("Please enter a commit message.");
         }
 
@@ -124,13 +124,157 @@ public class Repository {
             newFiles.remove(fileName);
         }
 
+        for (Map.Entry<String, String> entry : stage.getAdditions().entrySet() ) {
+            String fileName = entry.getKey();
+            String fileUID = entry.getValue();
+            newFiles.put(fileName, fileUID);
+        }
+
+        Commit newCommit = new Commit(message, new Date(), List.of(parent.getUID()), newFiles);
+
+        saveCommit(newCommit);
+
+        writeContents(join(HEADS_DIR, getBranch()), newCommit.getUID()); //修改HEAD uid（移动头指针）
+
+        writeStage(new Stage()); //清空暂存区
     }
 
-    public static void rm(String fileName) {}
-    public static void log() {}
-    public static void globalLog() {}
-    public static void find(String message) {}
-    public static void status() {}
+    /** Unstage the file if it is currently staged for addition.
+     * If the file is tracked in the current commit, stage it
+     * for removal and remove the file from the working directory
+     * if the user has not already done so
+     * (do not remove it unlessit is tracked in the current commit).
+     * */
+    public static void rm(String fileName) {
+        Stage stage = readStage();
+        Commit head = readCommit(getHead());
+
+        boolean tracked = head.getFiles().containsKey(fileName);
+        boolean staged = stage.getAdditions().containsKey(fileName);
+
+        if ( (!tracked) && (!staged) ) {
+            throw error("No reason to remove the file.");
+        }
+
+        if (staged) {
+            stage.getAdditions().remove(fileName);
+        }
+
+        if (tracked) {
+            stage.getRemovals().add(fileName);
+            if (join(CWD, fileName).isFile()) {
+                restrictedDelete(fileName);
+            }
+        }
+        writeStage(stage);
+    }
+
+    private static void log(Commit c){
+        System.out.println("===");
+        System.out.println("commit " + c.getUID());
+
+        if (c.getParentHash().size() > 1){
+            System.out.println("Merge: " + c.getParentHash().get(0).substring(0, 7) + " " + c.getParentHash().get(1).substring(0, 7));
+        }
+
+        Formatter formTime = new Formatter();
+        formTime.format(Locale.US,"Date: %1$ta %1$tb %1$te %1$tT %1$tY %1$tz", c.getTimestamp());
+        System.out.println(formTime.toString());
+        System.out.println(c.getMessage());
+
+        List<String> parentHash = c.getParentHash();
+        if (parentHash.isEmpty()) {
+            return;
+        }
+
+        Commit parentCommit = readCommit(parentHash.get(0));
+        log(parentCommit);
+    }
+
+    public static void log() {
+        Commit head = readCommit(getHead());
+        log(head);
+    }
+
+    public static void globalLog() {
+        List<String> commitList = plainFilenamesIn(COMMITS_DIR);
+        for (String commitName : commitList) {
+            Commit c = readCommit(commitName);
+
+            System.out.println("===");
+            System.out.println("commit " + c.getUID());
+
+            if (c.getParentHash().size() > 1){
+                System.out.println("Merge: " + c.getParentHash().get(0).substring(0, 7) + " " + c.getParentHash().get(1).substring(0, 7));
+            }
+
+            Formatter formTime = new Formatter();
+            formTime.format(Locale.US,"Date: %1$ta %1$tb %1$te %1$tT %1$tY %1$tz", c.getTimestamp());
+            System.out.println(formTime.toString());
+            System.out.println(c.getMessage());
+        }
+    }
+
+    /** Prints out the ids of all commits that have the given commit message,
+     * one per line. If there are multiple such commits, it prints the ids out
+     * on separate lines. The commit message is a single operand;
+     * to indicate a multiword message, put the operand in quotation marks */
+    public static void find(String message) {
+        List<String> commitList = plainFilenamesIn(COMMITS_DIR);
+        boolean found = false;
+
+        for (String commitName : commitList) {
+            Commit c = readCommit(commitName);
+            String string = c.getMessage();
+            if (string.equals(message)) {
+                System.out.println(c.getUID());
+                found = true;
+            }
+
+            if (!found) {
+                throw error("Found no commit with that message.");
+            }
+        }
+    }
+
+    public static void status() {
+        System.out.println("=== Branches ===");
+
+        String currentPointer = readContentsAsString(HEAD_FILE);
+        System.out.println("*" + currentPointer);
+
+        List<String> branchNameList = plainFilenamesIn(HEADS_DIR);
+        for(String branchName : branchNameList){
+            if(!branchName.equals(currentPointer)){
+                System.out.println(branchName);
+            }
+        }
+
+        System.out.println();
+        System.out.println("=== Staged Files ===");
+
+        Stage stage = readStage();
+
+        TreeMap<String, String> additionMap = stage.getAdditions();
+        for (Map.Entry<String, String> entry : additionMap.entrySet()){
+            System.out.println(entry.getKey());
+        }
+
+        System.out.println();
+        System.out.println("=== Removed Files ===");
+
+        TreeSet<String> removalSet = stage.getRemovals();
+        for (String fileName : removalSet){
+            System.out.println(fileName);
+        }
+
+        System.out.println();
+        System.out.println("=== Modifications Not Staged For Commit ===");
+
+        System.out.println();
+        System.out.println("=== Untracked Files ===");
+    }
+
     public static void checkout(String[] args) {}
     public static void branch(String name) {}
     public static void rmBranch(String name) {}

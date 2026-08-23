@@ -25,7 +25,10 @@ public class Main {
                 Repository.add(args[1]);
                 break;
             case "commit":
-                checkArgs(args, 2); Repository.commit(args[1]);
+                if (args.length > 2) {
+                    throw error("Incorrect operands.");
+                }
+                Repository.commit(args.length > 1 ? args[1] : null);
                 break;
             case "rm":
                 checkArgs(args, 2); Repository.rm(args[1]);
