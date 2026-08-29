@@ -274,12 +274,18 @@ public class Repository {
 
         System.out.println();
         System.out.println("=== Modifications Not Staged For Commit ===");
+        printModification();
 
         System.out.println();
         System.out.println("=== Untracked Files ===");
+        printUntracked();
     }
 
-    /** Choose which kind of checkout to operate */
+    /** Choose which kind of checkout to operate:
+     * 1.java gitlet.Main checkout -- [file name]
+     * 2.java gitlet.Main checkout [commit id] -- [file name]
+     * 3.java gitlet.Main checkout [branch name]
+     * */
     public static void checkout(String[] args) {
         if (args.length == 3 && args[1].equals("--")) {
             checkoutFile(getHead(), args[2]);
@@ -291,10 +297,79 @@ public class Repository {
             throw error("Incorrect operands.");
         }
     }
+    private static void checkoutFile(String commitUID, String fileName) {
+        if (!join(COMMITS_DIR, commitUID).isFile()) {
+            throw error("No commit with that id exists.");
+        }
 
-    public static void branch(String name) {}
-    public static void rmBranch(String name) {}
-    public static void reset(String uid) {}
+        Commit commit = readCommit(commitUID);
+        String blobUID = blobOf(commit, fileName);
+
+        if (blobUID == null) {
+            throw error("File does not exist in that commit.");
+        }
+
+        writeContents(join(CWD, fileName), readContents(join(BLOBS_DIR, blobUID)));
+    }
+
+    private static void checkoutBranch(String branchName) {
+        if (!join(HEADS_DIR, branchName).isFile()) {
+            throw error("No such branch exists.");
+        }
+
+        String currentBranch = readContentsAsString(HEAD_FILE);
+        if (branchName.equals(currentBranch)) {
+            throw error("No need to checkout the current branch.");
+        }
+
+        String targetUID = readContentsAsString(join(HEADS_DIR, branchName));
+        Commit target = readCommit(targetUID);
+
+        resetWorkingDir(target);
+
+        writeContents(HEAD_FILE, branchName);
+        writeStage(new Stage());
+    }
+
+    /** Creates a new branch with the given name,
+     * and points it at the current head commit.
+     * A branch is nothing more than a name for a reference
+     * (a SHA-1 identifier) to a commit node.
+     * This command does NOT immediately switch to the newly created branch (just as in real Git).
+     * Before you ever call branch, your code should
+     * be running with a default branch called “master”. */
+    public static void branch(String name) {
+        if (join(HEADS_DIR, name).isFile()) {
+            throw error("A branch with that name already exists.");
+        }
+
+        writeContents(join(HEADS_DIR, name), getHead());
+    }
+
+    public static void rmBranch(String name) {
+        if (!join(HEADS_DIR, name).isFile()) {
+            throw error("A branch with that name does not exist.");
+        }
+
+        String currentBranch = readContentsAsString(HEAD_FILE);
+        if (name.equals(currentBranch)) {
+            throw error("Cannot remove the current branch.");
+        }
+        restrictedDelete(join(HEADS_DIR, name));
+    }
+
+    public static void reset(String uid) {
+        if (!join(COMMITS_DIR, uid).isFile()) {
+            throw error("No commit with that id exists.");
+        }
+
+        Commit target = readCommit(uid);
+        resetWorkingDir(target);
+
+        writeContents(join(HEADS_DIR, getBranch()), uid);
+        writeStage(new Stage());
+    }
+
     public static void merge(String branchName) {}
 
 
@@ -353,51 +428,7 @@ public class Repository {
         writeObject(INDEX_FILE, s);
     }
 
-    private static void checkoutFile(String commitUID, String fileName) {
-        if (!join(COMMITS_DIR, commitUID).isFile()) {
-            throw error("No commit with that id exists.");
-        }
 
-        Commit commit = readCommit(commitUID);
-        String blobUID = blobOf(commit, fileName);
-
-        if (blobUID == null) {
-            throw error("File does not exist in that commit.");
-        }
-
-        writeContents(join(CWD, fileName), readContents(join(BLOBS_DIR, blobUID)));
-    }
-
-    private static void checkoutBranch(String branchName) {
-        if (!join(HEADS_DIR, branchName).isFile()) {
-            throw error("No such branch exists.");
-        }
-
-        String currentBranch = readContentsAsString(HEAD_FILE);
-        if (branchName.equals(currentBranch)) {
-            throw error("No need to checkout the current branch.");
-        }
-
-        String targetUID = readContentsAsString(join(HEADS_DIR, branchName));
-        Commit target = readCommit(targetUID);
-        Commit current = readCommit(getHead());
-
-        checkUntrackedOverwrite(target);
-
-        for (String fileName : target.getFiles().keySet()) {
-            String blobUID = blobOf(target, fileName);
-            writeContents(join(CWD, fileName), readContents(join(BLOBS_DIR, blobUID)));
-        }
-
-        for (String fileName : current.getFiles().keySet()) {
-            if (!target.getFiles().containsKey(fileName)) {
-                restrictedDelete(join(CWD, fileName));
-            }
-        }
-
-        writeContents(HEAD_FILE, branchName);
-        writeStage(new Stage());
-    }
 
     private static void checkUntrackedOverwrite(Commit target) {
         Commit current = readCommit(getHead());
@@ -414,6 +445,63 @@ public class Repository {
 
             if (!tracked && !staged) {
                 throw error("There is an untracked file in the way; delete it, or add and commit it first.");
+            }
+        }
+    }
+
+    private static void resetWorkingDir(Commit target){
+        Commit current = readCommit(getHead());
+        checkUntrackedOverwrite(target);
+
+        for (String fileName : target.getFiles().keySet()) {
+            String blobUID = blobOf(target, fileName);
+            writeContents(join(CWD, fileName), readContents(join(BLOBS_DIR, blobUID)));
+        }
+
+        for (String fileName : current.getFiles().keySet()) {
+            if (!target.getFiles().containsKey(fileName)) {
+                restrictedDelete(join(CWD, fileName));
+            }
+        }
+    }
+
+    private static void printModification(){
+        Commit head = readCommit(getHead());
+        Stage stage = readStage();
+
+        for (String fileName : head.getFiles().keySet()) {
+            String headBlob = head.getFiles().get(fileName);
+            String stagedBlob = stage.getAdditions().get(fileName);
+
+            if(!join(CWD, fileName).isFile()){
+                if (!stage.getRemovals().contains(fileName)) {
+                    System.out.println(fileName + " (deleted)");
+                }
+            } else {
+                File workingFile = join(CWD, fileName);
+                String workingBlob = sha1(readContents(workingFile));
+                if (workingBlob.equals(headBlob)) {
+                    continue;
+                } else {
+                    if (stagedBlob == null || !workingBlob.equals(stagedBlob)){
+                        System.out.println(fileName + " (modified)");
+                    }
+                }
+            }
+        }
+    }
+
+    private static void printUntracked(){
+        Commit head = readCommit(getHead());
+        Stage stage = readStage();
+
+        for(String fileName : plainFilenamesIn(CWD)){
+            if (head.getFiles().containsKey(fileName)) {
+                continue;
+            } else if (stage.getAdditions().containsKey(fileName)) {
+                continue;
+            } else {
+                System.out.println(fileName);
             }
         }
     }
