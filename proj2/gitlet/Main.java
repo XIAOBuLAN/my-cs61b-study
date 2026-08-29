@@ -47,7 +47,7 @@ public class Main {
                 break;
             case "checkout":
                 Repository.checkout(args);
-                break;   // 参数最复杂，自己解析
+                break;
             case "branch":
                 checkArgs(args, 2); Repository.branch(args[1]);
                 break;

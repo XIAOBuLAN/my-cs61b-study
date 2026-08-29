@@ -182,6 +182,8 @@ public class Repository {
         System.out.println(formTime.toString());
         System.out.println(c.getMessage());
 
+        System.out.println();
+
         List<String> parentHash = c.getParentHash();
         if (parentHash.isEmpty()) {
             return;
@@ -212,6 +214,8 @@ public class Repository {
             formTime.format(Locale.US,"Date: %1$ta %1$tb %1$te %1$tT %1$tY %1$tz", c.getTimestamp());
             System.out.println(formTime.toString());
             System.out.println(c.getMessage());
+
+            System.out.println();
         }
     }
 
@@ -226,14 +230,14 @@ public class Repository {
         for (String commitName : commitList) {
             Commit c = readCommit(commitName);
             String string = c.getMessage();
+
             if (string.equals(message)) {
                 System.out.println(c.getUID());
                 found = true;
             }
-
-            if (!found) {
-                throw error("Found no commit with that message.");
-            }
+        }
+        if (!found) {
+            throw error("Found no commit with that message.");
         }
     }
 
@@ -275,7 +279,19 @@ public class Repository {
         System.out.println("=== Untracked Files ===");
     }
 
-    public static void checkout(String[] args) {}
+    /** Choose which kind of checkout to operate */
+    public static void checkout(String[] args) {
+        if (args.length == 3 && args[1].equals("--")) {
+            checkoutFile(getHead(), args[2]);
+        } else if (args.length == 4 && args[2].equals("--")) {
+            checkoutFile(args[1], args[3]);
+        } else if (args.length == 2) {
+            checkoutBranch(args[1]);
+        } else {
+            throw error("Incorrect operands.");
+        }
+    }
+
     public static void branch(String name) {}
     public static void rmBranch(String name) {}
     public static void reset(String uid) {}
@@ -337,8 +353,68 @@ public class Repository {
         writeObject(INDEX_FILE, s);
     }
 
-    private static void checkoutFile(String uid, String fileName) {
+    private static void checkoutFile(String commitUID, String fileName) {
+        if (!join(COMMITS_DIR, commitUID).isFile()) {
+            throw error("No commit with that id exists.");
+        }
 
-    } // 从某提交把某文件写回工作区
+        Commit commit = readCommit(commitUID);
+        String blobUID = blobOf(commit, fileName);
 
+        if (blobUID == null) {
+            throw error("File does not exist in that commit.");
+        }
+
+        writeContents(join(CWD, fileName), readContents(join(BLOBS_DIR, blobUID)));
+    }
+
+    private static void checkoutBranch(String branchName) {
+        if (!join(HEADS_DIR, branchName).isFile()) {
+            throw error("No such branch exists.");
+        }
+
+        String currentBranch = readContentsAsString(HEAD_FILE);
+        if (branchName.equals(currentBranch)) {
+            throw error("No need to checkout the current branch.");
+        }
+
+        String targetUID = readContentsAsString(join(HEADS_DIR, branchName));
+        Commit target = readCommit(targetUID);
+        Commit current = readCommit(getHead());
+
+        checkUntrackedOverwrite(target);
+
+        for (String fileName : target.getFiles().keySet()) {
+            String blobUID = blobOf(target, fileName);
+            writeContents(join(CWD, fileName), readContents(join(BLOBS_DIR, blobUID)));
+        }
+
+        for (String fileName : current.getFiles().keySet()) {
+            if (!target.getFiles().containsKey(fileName)) {
+                restrictedDelete(join(CWD, fileName));
+            }
+        }
+
+        writeContents(HEAD_FILE, branchName);
+        writeStage(new Stage());
+    }
+
+    private static void checkUntrackedOverwrite(Commit target) {
+        Commit current = readCommit(getHead());
+        Stage stage = readStage();
+
+        for (String fileName : target.getFiles().keySet()) {
+            File workingFile = join(CWD, fileName);
+            if (!workingFile.isFile()) {
+                continue;
+            }
+
+            boolean tracked = current.getFiles().containsKey(fileName);
+            boolean staged = stage.getAdditions().containsKey(fileName);
+
+            if (!tracked && !staged) {
+                throw error("There is an untracked file in the way; delete it, or add and commit it first.");
+            }
+        }
+    }
 }
